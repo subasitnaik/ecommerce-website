@@ -1,0 +1,196 @@
+// Free-tier friendly: Neon Postgres (Vercel) — set DATABASE_URL in .env
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ShopSettings {
+  id                   String   @id @default("default")
+  codEnabled           Boolean  @default(true)
+  /** JSON array: { imageUrl, href?, alt? }[] */
+  carouselSlides       Json?
+  /** JSON string[]: ordered rails — "bestsellers" and/or "category:{slug}". */
+  homeHighlightRails   Json?
+  /** Redundant first-rail token (mirrors homeHighlightRails[0]) for older readers. */
+  homeProductMode      String   @default("bestsellers")
+  homeProductsPerPage  Int      @default(6)
+  /**
+   * Navbar shop name font — id from `SHOP_NAME_FONTS` (see shop-name-fonts.ts).
+   * null = use default site font (body sans).
+   */
+  shopNameFont         String?
+  /**
+   * JSON array: { id: string, name: string, urlTemplate: string }[]
+   * urlTemplate must include {{awb}} — replaced when building customer tracking links.
+   */
+  courierPresets       Json?
+  updatedAt            DateTime @default(now()) @updatedAt
+}
+
+/** Discount codes — `type` = percent (value 1–100) or fixed (value in minor units / cents). */
+model Coupon {
+  id                 String    @id @default(cuid())
+  code               String    @unique
+  type               String
+  value              Int
+  active             Boolean   @default(true)
+  minSubtotalCents   Int?
+  expiresAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
+}
+
+model Category {
+  id         String    @id @default(cuid())
+  name       String
+  slug       String    @unique
+  imageUrl   String?
+  sortOrder  Int       @default(0)
+  showOnHome Boolean   @default(true)
+  products   Product[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  role         String   @default("admin")
+  createdAt    DateTime @default(now())
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  description String      @db.Text
+  /** Base list price. Final line = sizeList + variantList - base (see ProductSize / ProductVariant). */
+  priceCents  Int
+  /** Optional MRP; shown struck through on storefront when greater than the selling price. */
+  mrpCents    Int?
+  currency    String      @default("INR")
+  imageUrl    String?
+  active      Boolean     @default(true)
+  featured    Boolean     @default(false)
+  categoryId  String?
+  category    Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @default(now()) @updatedAt
+  orderItems  OrderItem[]
+  reviews     Review[]
+  sizes       ProductSize[]
+  variants    ProductVariant[]
+  stocks      ProductStock[]
+}
+
+/** Admin-managed size labels, e.g. S or 32 — not hardcoded. */
+model ProductSize {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  label     String
+  /// List price in minor units; null = use `Product.priceCents` for the size add-on (delta 0). Combined with variant: `sizeList + variantList - base`.
+  priceCents Int?
+  sortOrder Int      @default(0)
+  stocks    ProductStock[]
+
+  @@index([productId])
+}
+
+/** Colour / style; optional per-variant list price (add-on: `variantList - base` combined with size). */
+model ProductVariant {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  label      String
+  /** Primary photo; up to 3 per variant in imageUrl, imageUrl2, imageUrl3. */
+  imageUrl   String?
+  imageUrl2  String?
+  imageUrl3  String?
+  /// null = use `Product.priceCents` (delta 0 in combined pricing).
+  priceCents Int?
+  sortOrder  Int      @default(0)
+  stocks     ProductStock[]
+
+  @@index([productId])
+}
+
+/** Stock per variant × size (0 = out of stock). */
+model ProductStock {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  sizeId    String
+  size      ProductSize @relation(fields: [sizeId], references: [id], onDelete: Cascade)
+  quantity  Int        @default(0)
+  /// When true, this size × variant is not sold (not orderable), distinct from temporary OOS.
+  notOffered Boolean @default(false)
+
+  @@unique([variantId, sizeId])
+  @@index([productId])
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  authorName String
+  rating     Int
+  comment    String   @db.Text
+  /** Customer photos attached to this review — optional. */
+  imageUrls  String[] @default([])
+  createdAt  DateTime @default(now())
+}
+
+model Order {
+  id              String    @id @default(cuid())
+  /** Monotonic storefront order reference (shown to customers & admin). */
+  orderNumber     Int       @unique @default(autoincrement())
+  /** Opaque credential for `/orders` lookup together with purchaser email (do not expose before payment settles). */
+  guestAccessToken String   @unique
+  status          String    @default("pending")
+  totalCents      Int
+  currency        String    @default("INR")
+  customerEmail   String?
+  customerName    String?
+  customerPhone   String?
+  /** Door / street delivery address (captures storefront checkout shipping). */
+  shippingLine1   String?
+  shippingLine2   String?
+  shippingCity    String?
+  shippingState   String?
+  shippingPostalCode String?
+  /** ISO country code — default INR storefront uses `IN`. */
+  shippingCountry String?   @default("IN")
+  paymentProvider String?
+  /** Gateway / external payment order id (e.g. Cashfree `cf_*`). */
+  paymentRef      String?   @unique
+  /** Set when the admin has opened the order; null = still unseen in the admin dashboard. */
+  adminSeenAt     DateTime?
+  /** AWB / consignment — optional. */
+  trackingNumber   String?
+  /** Id of a row in `ShopSettings.courierPresets` — used with trackingNumber to build courier URL. */
+  courierPresetId  String?
+  createdAt       DateTime  @default(now())
+  items           OrderItem[]
+}
+
+model OrderItem {
+  id            String  @id @default(cuid())
+  orderId       String
+  order         Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product @relation(fields: [productId], references: [id])
+  quantity      Int
+  priceCents    Int
+  size          String?
+  variantId     String?
+  variantLabel  String?
+}

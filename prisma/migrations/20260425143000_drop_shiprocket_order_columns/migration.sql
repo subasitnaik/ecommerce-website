@@ -1,0 +1,3 @@
+ALTER TABLE "Order" DROP COLUMN IF EXISTS "shiprocketOrderId";
+ALTER TABLE "Order" DROP COLUMN IF EXISTS "shiprocketShipmentId";
+ALTER TABLE "Order" DROP COLUMN IF EXISTS "awbCode";

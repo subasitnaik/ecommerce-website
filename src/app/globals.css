@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+/* Class-based dark mode (Free Admin Dashboard template uses `dark` on <html>) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --surface: #ffffff;
+  --surface-warm: #fafaf9;
+  --elevated: #ffffff;
+  --ink: #1c1917;
+  --ink-muted: #78716c;
+  --line: rgb(231 229 228 / 0.9);
+  --accent: #292524;
+}
+
+html.dark {
+  --surface: #0c0a09;
+  --surface-warm: #1c1917;
+  --elevated: #1c1917;
+  --ink: #fafaf7;
+  --ink-muted: #a8a29e;
+  --line: rgb(68 64 60 / 0.45);
+  --accent: #e7e5e4;
+}
+
+@theme inline {
+  --color-background: var(--surface);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-sans-app);
+  --font-mono: var(--font-geist-mono);
+  /* Kuzma Free Admin Dashboard palette */
+  --color-blackPrimary: #030712;
+  --color-blackSecondary: rgb(48 48 48 / 0.9);
+  --color-whiteSecondary: #f0f0f0;
+  --shadow-custom-white: 0px 4px 10px 0px rgb(255 255 255 / 0.9);
+}
+
+body {
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans-app), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1;
+}
+
+::selection {
+  background: rgb(41 37 36 / 0.12);
+}
+
+html.dark ::selection {
+  background: rgb(250 250 249 / 0.12);
+}
+
+/* Admin dashboard — sidebar drawer only below `xl` (Tailwind 1280px); desktop keeps column visible. */
+@media (max-width: 1279px) {
+  .sidebar-closed {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-out;
+  }
+
+  .sidebar-open {
+    transform: translateX(0);
+    transition: transform 0.3s ease-in;
+  }
+}
